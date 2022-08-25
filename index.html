@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPS</title>
+  <style>
+    .loader {
+      border: 16px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 16px solid #3498db;
+      width: 50px;
+      height: 50px;
+      -webkit-animation: spin 2s linear infinite; /* Safari */
+      animation: spin 2s linear infinite;
+    }
+
+    .button {
+      font-family: 'Hammersmith One', sans-serif;
+
+      color: white;
+      text-align: center;
+      border-radius: 8px;
+
+      background: #42A5F6;
+      padding: 5px 10px 5px 10px;
+      border: none;
+    }
+    .button:hover {
+      background: #0090FF;
+      color: black;
+    }
+
+    /* Safari */
+    @-webkit-keyframes spin {
+      0% { -webkit-transform: rotate(0deg); }
+      100% { -webkit-transform: rotate(360deg); }
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @media screen and (min-width: 1001px) {
+      #recap {
+        font-size: 30px;
+      }
+      .map {
+        width: 50%;
+        height:400px;
+      }
+    }
+
+    /* If the screen size is 600px wide or less, set the font-size of <div> to 30px */
+    @media screen and (max-width: 1000px) {
+      #recap {
+        font-size:4vw;
+      }
+      .map {
+        width: 100%;
+        height:400px;
+      }
+    }
+
+
+
+  </style>
+<script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@main/dist/en/v7.0.0/legacy/ol.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@main/dist/en/v7.0.0/legacy/ol.css">
+<script src='https://cdn.plot.ly/plotly-2.12.1.min.js'></script>
+</head>
+
+<body>
+
+<button class="button" role="button" id="startMesure" onclick="getLocation()">Start Mesure</button>
+<div id="loading" class="loader" style="display: none;"></div>
+<p id="recap"></p>
+<div class="map" id="map" ></div>
+<button class="button" role="button" style="display: none;" id="stopMesure" onclick="stopLocation()">Stop Mesure</button>
+<div id="plot_precis"></div>
+
+<script>
+var x = document.getElementById("recap");
+var i=0
+var id
+var latitude=[]
+var longitude=[]
+var accuracy=[]
+var options = {
+  enableHighAccuracy: true,
+  timeout: 60000,
+  maximumAge: 0
+};
+
+var accuracy_x=[]
+var accuracy_y=[]
+
+var map = new ol.Map({
+        target: 'map',
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.OSM()
+          })
+        ],
+        view: new ol.View({
+       	projection:'EPSG:4326',
+          center: [0,0],
+          zoom: 1
+        })
+    });
+
+var markers = new ol.layer.Vector({
+  source: new ol.source.Vector(),
+  style: new ol.style.Style({
+    image: new ol.style.RegularShape({
+      fill: new ol.style.Fill({color: 'black'}),
+      stroke: new ol.style.Stroke({color: 'black', width: 3}),
+      points: 4,
+      radius: 6,
+      radius2: 0,
+      angle: Math.PI / 4
+    })
+  })
+});
+var markersMean = new ol.layer.Vector({
+  source: new ol.source.Vector(),
+  style: new ol.style.Style({
+    image: new ol.style.RegularShape({
+      fill: new ol.style.Fill({color: 'red'}),
+      stroke: new ol.style.Stroke({color: 'red', width: 3}),
+      points: 4,
+      radius: 6,
+      radius2: 0,
+      angle: Math.PI / 4
+    })
+  })
+});
+
+var buff = new ol.layer.Vector({
+  source: new ol.source.Vector(),
+});
+
+map.addLayer(buff);
+map.addLayer(markers);
+map.addLayer(markersMean);
+
+
+
+
+
+function getLocation() {
+  i=0
+  document.getElementById("stopMesure").style.display = '';
+  document.getElementById("loading").style.display = '';
+  document.getElementById("startMesure").style.display = 'none';
+  id = navigator.geolocation.watchPosition(showPosition, showError, options)
+
+}
+
+function stopLocation() {
+  navigator.geolocation.clearWatch(id)
+  document.getElementById("startMesure").style.display = '';
+  document.getElementById("stopMesure").style.display = 'none';
+  document.getElementById("loading").style.display = 'none';
+}
+
+function showPosition(position) {
+  i+=1
+  if( i < 4){
+    x.innerHTML = "Attente signal stable, " + "mesure numéro : "+ i
+    
+    accuracy_x.push(i)
+    accuracy_y.push(Math.round((position.coords.accuracy + Number.EPSILON) * 1000000) / 1000000)
+
+  } else {
+  
+      latitude_i=Math.round((position.coords.latitude + Number.EPSILON) * 1000000) / 1000000
+      longitude_i=Math.round((position.coords.longitude + Number.EPSILON) * 1000000) / 1000000
+      accuracy_i=Math.round((position.coords.accuracy + Number.EPSILON) * 1000000) / 1000000
+
+      latitude.push(latitude_i)
+      longitude.push(longitude_i)
+      accuracy.push(accuracy_i)
+
+      accuracy_x.push(i)
+      accuracy_y.push(Math.round((position.coords.accuracy + Number.EPSILON) * 1000000) / 1000000)
+  
+      x.innerHTML = "Mesure numéro : "+ i +
+      "<br>Latitude: " + latitude_i +
+      "<br>Longitude: " + longitude_i +
+      "<br>Precision: "+ accuracy_i +
+      "<br><br><b>Latitude moyenne : " +mean(latitude)+"</b>"+
+      "<br><br><b>Longitude moyenne : " +mean(longitude)+"</b>"+
+      "<br><br><b>Accuracy moyenne : " +mean(accuracy)+"</b>";
+
+
+      //console.log( Math.min(...longitude)-(Math.min(...longitude)*0.00000001), (Math.max(...longitude)*0.00000001)+Math.max(...longitude))
+      //console.log( Math.min(...latitude)-(Math.min(...latitude)*0.00000001), (Math.max(...latitude)*0.00000001)+Math.max(...latitude))
+      markersMean.getSource().clear()
+      buff.getSource().clear()
+      marker = new ol.Feature(new ol.geom.Point([mean(longitude),mean(latitude)]));
+      buffer = new ol.geom.Polygon.circular([mean(longitude),mean(latitude)], mean(accuracy));
+      markersMean.getSource().addFeature(marker);
+      buff.getSource().addFeature(new ol.Feature(buffer));
+      marker = new ol.Feature(new ol.geom.Point([longitude_i,latitude_i]));
+      markers.getSource().addFeature(marker);
+
+      map.getView().setCenter([longitude_i,latitude_i])
+      
+      console.log(4 % 2);
+
+      if (i%4==0){
+        //map.getView().setZoom(19)
+        map.getView().fit(buff.getSource().getExtent(), {
+        maxZoom: 19,
+        duration: 500,
+      });
+      }
+    }
+    var trace1 = {
+      x: accuracy_x,
+      y: accuracy_y,
+      type: 'scatter'
+    };
+    var layout = {
+      title:'Précision du GPS',
+      xaxis: {
+        title: 'Itération',
+        showgrid: false,
+        zeroline: false
+      },
+      yaxis: {
+        title: 'Précision (m)',
+        showline: false
+      }
+    };
+    var data = [trace1];
+    Plotly.newPlot('plot_precis', data, layout);
+}
+
+
+function mean(table_in){
+
+    let sum = table_in.reduce((a,c) => a + c, 0);
+    let avg = sum / table_in.length;
+    avg = Math.round((avg + Number.EPSILON) * 1000000) / 1000000
+    return avg
+}
+
+function showError(error) {
+  switch(error.code) {
+    case error.PERMISSION_DENIED:
+      x.innerHTML = "User denied the request for Geolocation."
+      break;
+    case error.POSITION_UNAVAILABLE:
+      x.innerHTML = "Location information is unavailable."
+      break;
+    case error.TIMEOUT:
+      x.innerHTML = "The request to get user location timed out."
+      break;
+    case error.UNKNOWN_ERROR:
+      x.innerHTML = "An unknown error occurred."
+      break;
+  }
+}
+</script>
+
+
+</body></html>
